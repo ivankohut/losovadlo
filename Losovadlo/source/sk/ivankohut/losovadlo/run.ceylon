@@ -3,7 +3,6 @@ import ceylon.collection {
 	MutableMap
 }
 import ceylon.file {
-	parsePath,
 	Nil,
 	File,
 	Directory,
@@ -115,18 +114,10 @@ Integer readNumberFromConsole(Integer maxValue) {
 	}
 }
 
-
-void clearScreen() {
-	for (i in 1..200) {
-		print("***************************************************************************");
-	}
-	print("");
-	print("");
-}
-
 Resource getResultsResource() {
-	return parsePath("results.txt").resource;
+	return ResultsResourceProvider().get();
 }
+
 
 shared void runLosovanie() {
 	
@@ -168,27 +159,3 @@ shared void runLosovanie() {
 		}
 }
 
-
-shared void loadLosovacAssignment() {
-	value res = getResultsResource();
-	switch (res) 
-		case (is File) {
-			print("Zadaj hladane meno:");
-			assert (exists requestedName = process.readLine());
-			print("Hladam meno: " + requestedName);
-			try (reader = res.Reader()) {
-				while (exists line = reader.readLine()) {
-					if (line.startsWith(requestedName)) {
-						value indexOfColon = line.firstIndexWhere((Character element) => element == ':') else nothing;
-						print(line.spanFrom(indexOfColon + 1));
-						break;
-					}
-				}
-			}
-			print("Koniec.");
-			process.readLine();
-			clearScreen();
-		} else {
-			print("Vysledky neboli najdene.");
-		}
-}
