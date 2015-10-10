@@ -37,7 +37,7 @@ class CliZaujemcaOVysledok() satisfies ZaujemcaOVysledok {
 	
 	shared actual void potvrdOboznamenieSa(String vylosovany) {
 		print(vylosovany);
-		print("Koniec.");
+		print("Stlac ENTER.");
 		process.readLine();
 		clearScreen();
 	}
@@ -51,7 +51,7 @@ class FileResourceReadable(Provider<Resource> res) satisfies Readable {
 	
 	shared actual class Reader(String? encoding) extends super.Reader(encoding) {
 		
-		AbstractReader underlying {
+		AbstractReader createUnderlying() {
 			value resource = res.get();
 			switch (resource) 
 			case (is File) {
@@ -60,6 +60,8 @@ class FileResourceReadable(Provider<Resource> res) satisfies Readable {
 				throw Exception("Vysledky losovania neboli najdene.");
 			} 
 		}
+		
+		value underlying = createUnderlying(); 
 		
 		shared actual void close() => underlying.close();
 		shared actual Byte[] readBytes(Integer max) => underlying.readBytes(max);
