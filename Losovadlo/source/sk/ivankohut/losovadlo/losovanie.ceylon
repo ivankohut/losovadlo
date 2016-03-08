@@ -16,27 +16,32 @@ import java.util {
 	Random
 }
 
-class Losovac(shared String name) {
-	shared actual String string => name;
-}
-
 interface LosovacChooser {
 	shared formal Losovac choose({Losovac*} losovaci);
 }
 
 class Losovadlo([Losovac,Losovac+] losovaci, LosovacChooser nextLosovacChooser) {
-	
-	MutableMap<Losovac,Losovac> result;
-	variable Losovac? nextLosovacOption;
 
-	if (losovaci.size == 2) {
-		result = HashMap{entries = {losovaci[0] -> losovaci[1], losovaci[1] -> losovaci[0]};};
-		nextLosovacOption = null;
-	} else {
-		result = HashMap<Losovac,Losovac>();
-		nextLosovacOption = nextLosovacChooser.choose(losovaci);
-	}
-	
+//	MutableMap<Losovac,Losovac> result;
+//	variable Losovac? nextLosovacOption;
+//
+//	if (losovaci.size == 2) {
+//		result = HashMap{entries = {losovaci[0] -> losovaci[1], losovaci[1] -> losovaci[0]};};
+//		nextLosovacOption = null;
+//	} else {
+//		result = HashMap<Losovac,Losovac>();
+//		nextLosovacOption = nextLosovacChooser.choose(losovaci);
+//	}
+
+	value [result, nextLosovacOptionValue] = if (losovaci.size == 2) then
+		[HashMap{entries = {losovaci[0] -> losovaci[1], losovaci[1] -> losovaci[0]};}, null]
+	else
+		[HashMap<Losovac,Losovac>(), nextLosovacChooser.choose(losovaci)];
+
+
+	variable value nextLosovacOption = nextLosovacOptionValue;
+
+
 	shared [Losovac, Losovac[]]? getOptions() {
 		if (exists nextLosovac = nextLosovacOption) {
 			value availableLosovaci = losovaci.filter((Losovac elem) => !result.items.contains(elem) && elem != nextLosovac);
@@ -46,12 +51,12 @@ class Losovadlo([Losovac,Losovac+] losovaci, LosovacChooser nextLosovacChooser) 
 			return null;
 		}
 	}
-	
+
 	shared void setSelection(Losovac selected) {
 		value nextLosovac = nextLosovacOption;
-		switch (nextLosovac) 
+		switch (nextLosovac)
 			case (is Null) { throw Exception("Losovanie je uz uzavrete."); }
-			case (is Losovac) { 
+			case (is Losovac) {
 				result.put(nextLosovac, selected);
 				value undecidedLosovaci = losovaci.filter((Losovac element) => !result.keys.contains(element));
 				//assert (is {Losovac+} undecidedLosovaci);
@@ -86,11 +91,11 @@ class Losovadlo([Losovac,Losovac+] losovaci, LosovacChooser nextLosovacChooser) 
 				}
 			}
 	}
-	
+
 	shared Map<Losovac,Losovac> getResults() {
 		return result;
 	}
-	
+
 	shared Boolean isFinished() {
 		return getOptions() exists;
 	}
@@ -120,42 +125,87 @@ Resource getResultsResource() {
 
 
 shared void runLosovanie() {
-	
+
 	[Losovac,Losovac+] losovaci = [
-		Losovac("Mama"), Losovac("Oco"), Losovac("Ivan"), Losovac("Lenka"), 
-		Losovac("Silvia"), Losovac("Beno"), Losovac("Maros"), Losovac("Majka"), Losovac("Ala")
+		CliLosovac("Mama"), CliLosovac("Oco"), CliLosovac("Ivan"), CliLosovac("Lenka"),
+		CliLosovac("Silvia"), CliLosovac("Beno"), CliLosovac("Maros"), CliLosovac("Majka"), CliLosovac("Ala")
 	];
-	
+
 	if (is File|Directory dest = getResultsResource()) {
 		print("Cielovy subor existuje. Koniec.");
 		return;
 	}
-	
+
 	value losovadlo = Losovadlo(losovaci, randomChooser);
 	while (exists options = losovadlo.getOptions()) {
-		print("Losovac: ``options[0]``");
-		print("Moznosti: 1 .. ``options[1].size ``");
-		value selection = options[1].get(readNumberFromConsole(options[1].size) - 1);
+		value selection = options[1].get(options[0].choose(options[1].size) - 1);
 		assert (exists selection);
 		losovadlo.setSelection(selection);
-		print("Vybrana moznost: " + selection.string);
-		process.readLine();
-		clearScreen();
+		options[0].acquaintWithSelection(selection);
 	}
 	print("Koniec losovania.");
-	
-	value res = getResultsResource();
-	switch (res) 
+
+
+	FileWriteableResults(ResultsResourceProvider()).write(losovadlo.getResults());
+}
+
+
+interface WritableResults {
+	shared formal void write(Map<Named,Named> results);
+}
+
+class FileWriteableResults(Provider<Resource> resourceProvider) satisfies WritableResults {
+
+	shared actual void write(Map<Named,Named> results) {
+		value res = resourceProvider.get();
+		switch (res)
 		case (is Nil) {
 			value file = res.createFile();
 			try (overWriter = file.Overwriter()) {
-				for (a in losovadlo.getResults()) {
-					overWriter.writeLine(a.key.string + ":" + a.item.string);
+				for (keyValue in results) {
+					overWriter.writeLine(keyValue.key.name + ":" + keyValue.item.name);
 				}
 			}
 		}
 		else {
-			print("Vysledky nesmu existovat!");
+			throw Exception("Vysledky nesmu existovat!");
 		}
+	}
+
 }
 
+
+interface Named {
+	shared formal String name;
+}
+
+interface Losovac satisfies Named {
+	shared formal Integer choose(Integer optionsCount);
+	shared formal void acquaintWithSelection(Named string);
+}
+
+interface Losovaci satisfies Iterable<Named>{
+
+
+}
+
+interface Klobuk {
+	shared formal Integer getOptionsCount(Named named);
+	shared formal Klobuk vylosovanie(Named losovac, Integer chosenOption);
+	shared formal Named vylosovany(Named losovac);
+}
+
+class CliLosovac(shared actual String name) satisfies Losovac {
+
+	shared actual void acquaintWithSelection(Named vylosovany) {
+		print("Vybrana moznost: " + vylosovany.name);
+		process.readLine();
+		clearScreen();
+	}
+
+	shared actual Integer choose(Integer optionsCount) {
+		print("Losovac: ``name``");
+		print("Moznosti: 1 .. ``optionsCount``");
+		return readNumberFromConsole(optionsCount);
+	}
+}
