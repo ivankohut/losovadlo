@@ -1,11 +1,8 @@
 import ceylon.collection {
-	HashMap,
-	MutableMap
+	HashMap
 }
 import ceylon.file {
 	Nil,
-	File,
-	Directory,
 	Resource
 }
 import ceylon.language {
@@ -16,28 +13,32 @@ import java.util {
 	Random
 }
 
+/**
+ * Entry point.
+ */
+shared void runLosovanie() {
+
+	Losovac createLosovac(String name) => FirstChoosingLosovac(name);
+
+	[Losovac,Losovac+] losovaci = [
+		createLosovac("Ala"), * ["Mama", "Oco", "Ivan", "Lenka", "Silvia", "Beno", "Maros", "Majka"].collect((name) => createLosovac(name))
+	];
+	FileWriteableResults(ResultsResourceProvider()).write(Losovanie(losovaci, randomChooser));
+}
+
 interface LosovacChooser {
 	shared formal Losovac choose({Losovac*} losovaci);
 }
 
 class Losovadlo([Losovac,Losovac+] losovaci, LosovacChooser nextLosovacChooser) {
 
-//	MutableMap<Losovac,Losovac> result;
-//	variable Losovac? nextLosovacOption;
-//
-//	if (losovaci.size == 2) {
-//		result = HashMap{entries = {losovaci[0] -> losovaci[1], losovaci[1] -> losovaci[0]};};
-//		nextLosovacOption = null;
-//	} else {
-//		result = HashMap<Losovac,Losovac>();
-//		nextLosovacOption = nextLosovacChooser.choose(losovaci);
-//	}
-
-	value [result, nextLosovacOptionValue] = if (losovaci.size == 2) then
+	value [resultX, nextLosovacOptionValue] = if (losovaci.size == 2) then
 		[HashMap{entries = {losovaci[0] -> losovaci[1], losovaci[1] -> losovaci[0]};}, null]
 	else
 		[HashMap<Losovac,Losovac>(), nextLosovacChooser.choose(losovaci)];
 
+
+	value result = resultX; // compiler bug workaround
 
 	variable value nextLosovacOption = nextLosovacOptionValue;
 
@@ -109,12 +110,14 @@ object randomChooser satisfies LosovacChooser {
 	}
 }
 
-Integer readNumberFromConsole(Integer maxValue) {
-	while (true) {
-		if (exists line = process.readLine(), exists vyber = parseInteger(line), vyber > 0 && vyber <= maxValue) {
-			return vyber;
-		} else {
-			print("Nebolo vybrane cislo od 1 do ``maxValue``");
+class NaturalNumberFromConsole(Integer maxValue) satisfies Provider<Integer> {
+	shared actual Integer get() {
+		while (true) {
+			if (exists line = process.readLine(), exists vyber = parseInteger(line), vyber > 0 && vyber <= maxValue) {
+				return vyber;
+			} else {
+				print("Nebolo vybrane cislo od 1 do ``maxValue``");
+			}
 		}
 	}
 }
@@ -123,47 +126,35 @@ Resource getResultsResource() {
 	return ResultsResourceProvider().get();
 }
 
-
-shared void runLosovanie() {
-
-	[Losovac,Losovac+] losovaci = [
-		CliLosovac("Mama"), CliLosovac("Oco"), CliLosovac("Ivan"), CliLosovac("Lenka"),
-		CliLosovac("Silvia"), CliLosovac("Beno"), CliLosovac("Maros"), CliLosovac("Majka"), CliLosovac("Ala")
-	];
-
-	if (is File|Directory dest = getResultsResource()) {
-		print("Cielovy subor existuje. Koniec.");
-		return;
+class Losovanie([Losovac, Losovac+] losovaci, LosovacChooser chooser) satisfies Iterable<[Named,Named]> {
+	// TODO
+	shared actual Iterator<Named[2]> iterator() {
+		value losovadlo = Losovadlo(losovaci, randomChooser);
+		while (exists options = losovadlo.getOptions()) {
+			value selection = options[1].get(options[0].choose(options[1].size) - 1);
+			assert (exists selection);
+			losovadlo.setSelection(selection);
+			options[0].acquaintWithSelection(selection);
+		}
+		print("Koniec losovania.");
+		return losovadlo.getResults().map((assignment) => [assignment.key, assignment.item]).iterator();
 	}
-
-	value losovadlo = Losovadlo(losovaci, randomChooser);
-	while (exists options = losovadlo.getOptions()) {
-		value selection = options[1].get(options[0].choose(options[1].size) - 1);
-		assert (exists selection);
-		losovadlo.setSelection(selection);
-		options[0].acquaintWithSelection(selection);
-	}
-	print("Koniec losovania.");
-
-
-	FileWriteableResults(ResultsResourceProvider()).write(losovadlo.getResults());
 }
 
-
 interface WritableResults {
-	shared formal void write(Map<Named,Named> results);
+	shared formal void write(Iterable<[Named,Named]> results);
 }
 
 class FileWriteableResults(Provider<Resource> resourceProvider) satisfies WritableResults {
 
-	shared actual void write(Map<Named,Named> results) {
+	shared actual void write(Iterable<[Named,Named]> results) {
 		value res = resourceProvider.get();
 		switch (res)
 		case (is Nil) {
 			value file = res.createFile();
 			try (overWriter = file.Overwriter()) {
 				for (keyValue in results) {
-					overWriter.writeLine(keyValue.key.name + ":" + keyValue.item.name);
+					overWriter.writeLine(keyValue[0].name + ":" + keyValue[1].name);
 				}
 			}
 		}
@@ -204,8 +195,22 @@ class CliLosovac(shared actual String name) satisfies Losovac {
 	}
 
 	shared actual Integer choose(Integer optionsCount) {
+		value naturalNumber = NaturalNumberFromConsole(optionsCount);
 		print("Losovac: ``name``");
 		print("Moznosti: 1 .. ``optionsCount``");
-		return readNumberFromConsole(optionsCount);
+		return naturalNumber.get();
+	}
+}
+
+class FirstChoosingLosovac(shared actual String name) satisfies Losovac {
+
+	shared actual void acquaintWithSelection(Named vylosovany) {
+		print("Vybrana moznost: " + vylosovany.name);
+	}
+
+	shared actual Integer choose(Integer optionsCount) {
+		print("Losovac: ``name``");
+		print("Moznosti: 1 .. ``optionsCount``");
+		return 1;
 	}
 }
